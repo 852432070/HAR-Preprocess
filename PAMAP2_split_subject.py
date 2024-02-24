@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from collections import Counter
+import os
 
 #索引1为activity_id
 #索引[4:16)/[21,33)/[38,50)分别为3个IMU的3D-acc1,3D-acc2,3D-gyro,3D-magn(共36种特征)
@@ -23,14 +24,14 @@ def window(data, label, size, stride):
 
     return x, y
 
-def generate(window_size, step, is_test):
+def generate(window_size, step, is_test, test_subject):
     '''生成训练样本X和对应标签Y'''
     X, Y = [], []
     # 遍历9个subject文件
     for i in range(1, 10):
-        if is_test and i == 8:
+        if is_test and i in test_subject:
             continue
-        elif is_test == False and i != 8:
+        elif is_test == False and i not in test_subject:
             continue
         total = pd.read_csv('/data/wang_sc/datasets/PAMAP2_Dataset/Protocol/subject10' + str(i) + '.dat', header=None, sep=' ', usecols=loc).values
         total = total[~np.isnan(total).any(axis=1), :]  #去除NaN
@@ -71,14 +72,25 @@ def split(result, test_size):
         y_train.extend(y_train_)
     return x_train, y_train, x_test, y_test
 
+def gen_dataset(dataset, test_subject):
+    dir_name = dataset + "_subject_" + str(test_subject[0]) + str(test_subject[1])
+    dir_path = '/data/wang_sc/datasets/PAMAP2_Dataset/Cross_subject/' + dir_name
+    x_train, y_train = generate(171, 85, False, test_subject)
+    x_test, y_test = generate(171, 85, True, test_subject)
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+    np.save(dir_path + '/x_train', x_train)
+    np.save(dir_path + '/x_test', x_test)
+    np.save(dir_path + '/y_train', y_train)
+    np.save(dir_path + '/y_test', y_test)
 if __name__ == '__main__':
-    x_train, y_train = generate(171, 85, False)
-    x_test, y_test = generate(171, 85, True)
+    for i in range(9):
+        test_subject = [i % 9, (i+1) % 9]
+        print(f"Generating subject {test_subject[0]} and {test_subject[1]}")
+        gen_dataset("PAMAP2", test_subject)
+    
     # result = category(X, Y)
     # x_train, y_train, x_test, y_test = split(result, 0.2)
 
     # x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_tester/x_train', x_train)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_tester/x_test', x_test)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_tester/y_train', y_train)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_tester/y_test', y_test)
+    

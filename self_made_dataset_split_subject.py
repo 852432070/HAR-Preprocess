@@ -44,7 +44,7 @@ def window(data, label, size, stride):
 
     return x, y
 
-def generate(window_size, step, is_test):
+def generate(window_size, step, is_test, test_subject):
     '''生成训练样本X和对应标签Y'''
     test_user = 2
     files = os.listdir("/data/wang_sc/datasets/self_made_dataset")
@@ -54,9 +54,9 @@ def generate(window_size, step, is_test):
         parts = file.split('_')
         if len(parts) > 1:
             user = int(parts[1])
-        if is_test and user != test_user:
+        if is_test and user in test_subject:
             continue
-        elif is_test == False and user == test_user:
+        elif is_test == False and user not in test_subject:
             continue
         total = pd.read_csv("/data/wang_sc/datasets/self_made_dataset/" + file).values
         duration += total.shape[0]
@@ -97,14 +97,20 @@ def split(result, test_size):
         y_test.extend(y_test_)
     return x_train, y_train, x_test, y_test
 
-if __name__ == '__main__':
-    x_train, y_train = generate(171, 85, False)
-    x_test, y_test = generate(171, 85, True)
-    # X, Y = generate(171, 85)
-    # result = category(X, Y)
-    # x_train, y_train, x_test, y_test = split(result, 0.4)
+def gen_dataset(dataset, test_subject):
+    dir_name = dataset + "_subject_" + str(test_subject[0]) + str(test_subject[1])
+    dir_path = '/data/wang_sc/datasets/PAMAP2_Dataset/Cross_subject/' + dir_name
+    x_train, y_train = generate(171, 85, False, test_subject)
+    x_test, y_test = generate(171, 85, True, test_subject)
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+    np.save(dir_path + '/x_train', x_train)
+    np.save(dir_path + '/x_test', x_test)
+    np.save(dir_path + '/y_train', y_train)
+    np.save(dir_path + '/y_test', y_test)
 
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made_unseen_test_2/x_train', x_train)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made_unseen_test_2/x_test', x_test)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made_unseen_test_2/y_train', y_train)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_self_made_unseen_test_2/y_test', y_test)
+if __name__ == '__main__':
+    for i in range(6):
+        test_subject = [i % 6, (i+1) % 6]
+        print(f"Generating subject {test_subject[0]} and {test_subject[1]}")
+        gen_dataset("LIMU", test_subject)
