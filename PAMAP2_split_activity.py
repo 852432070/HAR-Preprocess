@@ -3,12 +3,15 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from collections import Counter
+import os
 
 #索引1为activity_id
 #索引[4:16)/[21,33)/[38,50)分别为3个IMU的3D-acc1,3D-acc2,3D-gyro,3D-magn(共36种特征)
 loc = [1] + [*range(4,16)] + [*range(21,33)] + [*range(38,50)]
 
-def window(data, label, size, stride, is_test):
+catset = set()
+
+def window(data, label, size, stride, is_test, test_activity):
     '''将数组data和label按照滑窗尺寸size和stride进行切割'''
     x, y = [], []
     for i in range(0, len(label), stride):
@@ -18,31 +21,30 @@ def window(data, label, size, stride, is_test):
             if len(l) > 1 or label[i] == 0: #当一个滑窗中含有包含多种activity或者activity_id为0（即属于其他动作），丢弃
                 continue
             elif len(l) == 1:
-                if is_test and label[i] >=10:
+                if is_test and label[i] in test_activity:
                     continue
-                elif is_test == False and label[i] < 10:
+                elif is_test == False and label[i] not in test_activity:
                     continue
+                # print(f"{is_test} {label[i]}")
                 x.append(data[i: i + size, :])
                 y.append(label[i])
+                catset.add(label[i])
     return x, y
 
-def generate(window_size, step, is_test):
+def generate(window_size, step, is_test, test_activity):
     '''生成训练样本X和对应标签Y'''
     X, Y = [], []
     # 遍历9个subject文件
     for i in range(1, 10):
-        # if is_test and i != 8:
-        #     continue
-        # elif is_test == False and i == 8:
-        #     continue
-        total = pd.read_csv('/data/wang_sc/datasets/PAMAP2_Dataset/Protocol/subject10' + str(i) + '.dat', header=None, sep=' ', usecols=loc).values
+        total = pd.read_csv('/home/wang_shichang/wang_sc/datasets/PAMAP2_Dataset/Protocol/subject10' + str(i) + '.dat', header=None, sep=' ', usecols=loc).values
         total = total[~np.isnan(total).any(axis=1), :]  #去除NaN
         # data = total[:, 1:]
         data = total[:, 8:17]
         label = total[:, 0].reshape(-1)
 
         # 调用window函数进行滑窗处理
-        x, y = window(data, label, window_size, step, is_test)
+        x, y = window(data, label, window_size, step, is_test, test_activity)
+
         X += x
         Y += y 
     X = np.dot(10, X).astype(np.int16)
@@ -74,14 +76,29 @@ def split(result, test_size):
         y_train.extend(y_train_)
     return x_train, y_train, x_test, y_test
 
+def gen_dataset(dataset, test_activity):
+    dir_name = dataset + "_activity_" + "_".join(map(str, test_activity))
+    dir_path = '/home/wang_shichang/wang_sc/datasets/PAMAP2_Dataset/Cross_activity/' + dir_name
+    x_train, y_train = generate(171, 85, False, test_activity)
+    x_test, y_test = generate(171, 85, True, test_activity)
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+    np.save(dir_path + '/x_train', x_train)
+    np.save(dir_path + '/x_test', x_test)
+    np.save(dir_path + '/y_train', y_train)
+    np.save(dir_path + '/y_test', y_test)
 if __name__ == '__main__':
-    x_train, y_train = generate(171, 85, False)
-    x_test, y_test = generate(171, 85, True)
+    activity = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 12.0, 13.0, 16.0, 17.0, 24.0]
+    for i in range(12):
+        test_index = [(i + j) % 12 for j in range(6)]
+        test_activity = [activity[index] for index in test_index]
+        print(f"Iteration {i}: {test_activity}")
+        gen_dataset("PAMAP2", test_activity)
+
+    print(catset)
+    
     # result = category(X, Y)
     # x_train, y_train, x_test, y_test = split(result, 0.2)
 
     # x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_activity0_5/x_train', x_train)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_activity0_5/x_test', x_test)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_activity0_5/y_train', y_train)
-    np.save('/data/wang_sc/datasets/PAMAP2_Dataset/Processed_unseen_activity0_5/y_test', y_test)
+    
